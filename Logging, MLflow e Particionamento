@@ -1,0 +1,131 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 🚀 Engenharia de Produção com Logging, MLflow e Particionamento Adaptativo
+# MAGIC
+# MAGIC Este notebook documenta um pipeline de produção robusto, modular e auditável com foco em performance, rastreabilidade e eficiência computacional.
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📦 1. Setup Inicial e Configurações Globais
+# MAGIC - Spark Session
+# MAGIC - Logging de performance
+# MAGIC - Configurações de particionamento adaptativo
+
+# COMMAND ----------
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.storagelevel import StorageLevel
+from datetime import datetime
+import mlflow
+
+spark = SparkSession.builder.appName("PipelineIdentifica2_Prod").getOrCreate()
+
+spark.conf.set("spark.sql.shuffle.partitions", 200)
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+
+# Logging modular
+log_etapas = []
+def log_performance(etapa, start):
+    elapsed = (datetime.now() - start).total_seconds()
+    print(f"\u23f1\ufe0f {etapa} finalizada em {elapsed:.2f}s")
+    log_etapas.append((etapa, elapsed))
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📁 2. Leitura de Dados com Particionamento Adaptativo
+
+# COMMAND ----------
+data_path = "dbfs:/FileStore/shared_uploads/data.parquet"
+df_raw = spark.read.parquet(data_path)
+
+optimal_partitions = max(200, df_raw.rdd.getNumPartitions() // 4)
+df_raw = df_raw.repartition(optimal_partitions, "idcliente").cache()
+print(f"\u2705 Dados particionados em {optimal_partitions} particoes")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 🧪 3. Feature Engineering com Logs
+
+# COMMAND ----------
+def feature_engineering(df):
+    return df.groupBy("idcliente").agg(
+        sum("quantidade").alias("quant_total"),
+        avg("valorunitario").alias("ticket_medio"),
+        countDistinct("dataconsumo").alias("frequencia"),
+        max("dataconsumo").alias("ultima_compra"),
+        collect_set("categoria_nivel_1").alias("categorias_1")
+    ).withColumn("recencia", datediff(current_date(), col("ultima_compra")))
+
+start = datetime.now()
+df_feat = feature_engineering(df_raw)
+log_performance("Feature Engineering", start)
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 🔄 4. Clusterização com KMeans e Silhouette
+
+# COMMAND ----------
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+
+assembler = VectorAssembler(inputCols=["ticket_medio", "frequencia", "recencia"], outputCol="features")
+df_features = assembler.transform(df_feat).na.drop()
+
+k = 6
+kmeans = KMeans(featuresCol="features", k=k, seed=42)
+model = kmeans.fit(df_features)
+predictions = model.transform(df_features)
+
+evaluator = ClusteringEvaluator()
+silhouette = evaluator.evaluate(predictions)
+
+print(f"\n🔍 Silhouette Score: {silhouette:.4f}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📈 5. Logging com MLflow
+
+# COMMAND ----------
+with mlflow.start_run(run_name="clusterizacao_identifica_2"):
+    mlflow.log_param("k", k)
+    mlflow.log_metric("silhouette", silhouette)
+    mlflow.log_artifact("/dbfs/FileStore/output/perfis_clusterizados.csv")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 🔹 6. Nomeação Dinâmica de Perfis
+
+# COMMAND ----------
+def nomear_cluster(ticket, freq, categorias):
+    if ticket > 200 and freq > 10:
+        return "A"
+    elif "T" in categorias:
+        return "P"
+    elif freq > 8:
+        return "F"
+    else:
+        return "O"
+
+nomear_udf = udf(nomear_cluster)
+df_nomeado = predictions.withColumn("perfil_nomeado", nomear_udf(col("ticket_medio"), col("frequencia"), col("categorias_1")))
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 🔐 7. Persistência Final e Exportação
+
+# COMMAND ----------
+output_path = "/FileStore/output/perfis_clusterizados.csv"
+df_final = df_nomeado.select("idcliente", "ticket_medio", "frequencia", "recencia", "perfil_nomeado")
+df_final.write.mode("overwrite").option("header", True).csv(output_path)
+print(f"\u2705 Exportado para {output_path}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📊 8. Logs Finais de Performance
+
+# COMMAND ----------
+for etapa, tempo in log_etapas:
+    print(f"{etapa:<30} => {tempo:.2f}s")

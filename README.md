@@ -89,4 +89,3 @@ a um pipeline de Machine Learning crítico. Com isso, o processo passou a ser ma
 - **Eficiente**
 - **Confiável**
 - **Pronto para escalabilidade** em ambientes reais de produção
-```

@@ -1,0 +1,30 @@
+# Problema Resolvido pelo modelo:
+
+"Pipeline de ML em produção ineficiente, sem monitoramento ou escalabilidade, levando a altos custos operacionais e incapacidade de lidar com volumes dinâmicos de dados em um ambiente crítico de negócios."
+
+Detalhamento do Problema (Antes da Solução):
+Baixa Observabilidade:
+
+Pipeline "monolítico" sem logs ou métricas, dificultando troubleshooting e auditoria.
+
+Equipe operacional não sabia quanto tempo cada etapa levava ou onde estavam os gargalos.
+
+Escalabilidade Limitada:
+
+Particionamento fixo (repartition(200)) causava:
+
+Subutilização de recursos para volumes pequenos.
+
+Overshuffling e lentidão para volumes grandes (ex: >1M registros).
+
+Gerenciamento Ineficiente de Dados:
+
+Persistência desorganizada de dados intermediários, gerando:
+
+Custos de armazenamento desnecessários.
+
+Latência devido a I/O excessivo.
+
+Falta de Padrões de Engenharia de Software:
+
+Código não modularizado, dificultando manutenção e evolução do pipeline.

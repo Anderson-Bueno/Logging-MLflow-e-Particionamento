@@ -1,4 +1,4 @@
-# Engenharia de Produção com Logging, MLflow e Particionamento
+# Como garantir que um pipeline de Machine Learning em produção seja eficiente, rastreável e escalável quando lidando com volumes dinâmicos de dados e operações críticas de negócio?
 
 ## 📌 Contexto e Objetivo
 
